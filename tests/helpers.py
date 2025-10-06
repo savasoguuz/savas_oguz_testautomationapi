@@ -1,16 +1,21 @@
 import os, json, random, time
+from typing import Any, Dict, Tuple
 
 BASE_URL = os.getenv("BASE_URL", "https://petstore.swagger.io/v2")
 
 def unique_id() -> int:
     return int(f"{int(time.time())}{random.randint(100,999)}")
 
-def unique_name(prefix="u") -> str:
+def unique_name(prefix: str = "u") -> str:
     return f"{prefix}{int(time.time())}{random.randint(100,999)}"
 
-def fetch_async(driver, method, url, body=None, headers=None):
-    
-    if headers is None: headers = {}
+def fetch_async(driver, method: str, url: str, body: Any = None, headers: Dict[str, str] | None = None) -> Dict[str, Any]:
+    """
+    Tarayıcıda fetch() çalıştırır. dict body -> JSON; str body -> ham.
+    HER ZAMAN {"status": int, "ok": bool, "body": Any} sözlüğü döner.
+    """
+    if headers is None:
+        headers = {}
     payload = json.dumps(body) if (body is not None and not isinstance(body, str)) else body
     script = """
       const done = arguments[arguments.length - 1];
@@ -25,11 +30,18 @@ def fetch_async(driver, method, url, body=None, headers=None):
         })
         .catch(err => done({ status: 0, ok: false, body: String(err) }));
     """
-    return driver.execute_async_script(script, method, url, payload, headers)
+    res = driver.execute_async_script(script, method, url, payload, headers)
+    if isinstance(res, dict) and "status" in res:
+        return res
+    return {"status": 0, "ok": False, "body": None}
 
-def fetch_multipart(driver, method, url, fields=None, file_spec=None, headers=None):
-    
-    if headers is None: headers = {}
+def fetch_multipart(driver, method: str, url: str, fields: Dict[str, str] | None = None,
+                    file_spec: Dict[str, Any] | None = None, headers: Dict[str, str] | None = None) -> Dict[str, Any]:
+    """
+    multipart/form-data upload. HER ZAMAN dict döner.
+    """
+    if headers is None:
+        headers = {}
     script = """
       const done = arguments[arguments.length - 1];
       const method = arguments[0], url = arguments[1];
@@ -49,16 +61,24 @@ def fetch_multipart(driver, method, url, fields=None, file_spec=None, headers=No
         })
         .catch(err => done({ status: 0, ok: false, body: String(err) }));
     """
-    return driver.execute_async_script(script, method, url, fields, file_spec, headers)
+    res = driver.execute_async_script(script, method, url, fields or {}, file_spec or {}, headers)
+    if isinstance(res, dict) and "status" in res:
+        return res
+    return {"status": 0, "ok": False, "body": None}
 
-def eventually_status(driver, method, url, expect=(200,), timeout=10.0, interval=0.5, headers=None, body=None):
-    
-    if isinstance(expect, int): expect = (expect,)
+def eventually_status(driver, method: str, url: str, expect: int | Tuple[int, ...] = (200,),
+                      timeout: float = 10.0, interval: float = 0.5,
+                      headers: Dict[str, str] | None = None, body: Any = None) -> Dict[str, Any]:
+    """
+    Kısa retry'lı istek. HER ZAMAN dict döner (None asla değil).
+    """
+    if isinstance(expect, int):
+        expect = (expect,)
     deadline = time.time() + timeout
-    last = None
+    last: Dict[str, Any] = {"status": 0, "ok": False, "body": None}
     while time.time() < deadline:
-        r = fetch_async(driver, method, url, body=body, headers=headers or {"Accept":"application/json"})
-        if r["status"] in expect:
+        r = fetch_async(driver, method, url, body=body, headers=headers or {"Accept": "application/json"})
+        if r.get("status") in expect:
             return r
         last = r
         time.sleep(interval)
