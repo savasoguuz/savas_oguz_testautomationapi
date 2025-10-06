@@ -1,3 +1,5 @@
+![tests](https://github.com/savasoguuz/savas_oguz_testautomationapi/actions/workflows/tests.yml/badge.svg)
+
 # savas_oguz_testautomationapi
 
 Selenium (headless) ile Swagger Petstore API uçlarına yönelik **PET / STORE / USER** test otomasyonu.
